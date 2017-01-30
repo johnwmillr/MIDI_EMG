@@ -1,12 +1,9 @@
-// #include <FilterOnePole.h>
-#include <Filters.h>
-
+#include <math.h>
 #define LED 13
 
 // Sensor pin
 const int sensorPin = A5;
 double sensorVal = 0;
-double volts = 0;
 
 // Threshold
 double noiseFloor = 0;
@@ -14,14 +11,11 @@ double threshold = 0;
 bool over_thresh = false;
 
 // MIDI Stuff
-const int n_sensors = 2;
-int pitches[n_sensors] = {50, 37};
-int noteVel = 0;
 bool note_is_on = false;
 
 // Timing stuff
-double t_prev_note[n_sensors] = {0, 0};
-int t_between_notes = 200; // Min. time until next trigger from sensor (ms)
+double t_prev_note = 0;
+int t_between_notes = 100; // Min. time until next trigger from sensor (ms)
 
 // ----------------------------------------------------------------
 
@@ -41,6 +35,29 @@ double sampleValues(const double n_samples = 5.0){
 
 }
 
+int convertSignalToMIDI(double sig, const int vel_min, const int vel_max){    
+  const double sig_min = log(threshold);
+  const double sig_max = log(1.35*threshold); // Guess  
+
+  sig = log(sig);
+
+  // Normalize to the desired MIDI velocity range
+  int midi_val = round((((sig - sig_min) * (vel_max - vel_min)) / (sig_max-sig_min)) + vel_min);
+  
+
+  if (midi_val > 127){
+    midi_val = 127;
+  }
+
+  // Serial.println(midi_val);
+
+  return midi_val;
+}
+
+int convertSignalToPitch(double sig){
+  
+}
+
 // ----------------------------------------------------------------
 void setup() {  
   pinMode(LED, OUTPUT);
@@ -48,35 +65,32 @@ void setup() {
   // Serial.begin(9600);
 
   noiseFloor = measureBaseline();
-  threshold = 1.3 * noiseFloor;
+  threshold = 1.21 * noiseFloor; // Trial and error
     
 }
 
 // ----------------------------------------------------------------
 void loop() {        
-    sensorVal = sampleValues(3.0);
-    // Serial.println(sensorVal);
+    sensorVal = sampleValues(3.0);    
+    double pitch = 0;
 
-    if (sensorVal > threshold && (millis() - t_prev_note[0]) > t_between_notes)
-    {
-      digitalWrite(LED, HIGH);
-      sendNoteOn(pitches[0], 100);
-      t_prev_note[0] = millis();
+    if (sensorVal > threshold && (millis() - t_prev_note) > t_between_notes)
+    {    
+      pitch = convertSignalToMIDI(sensorVal, 60, 80);
+      double vel   = convertSignalToVel(sensorVal, 30, 130);
+      sendNoteOn(pitch, vel);
+      t_prev_note = millis();
       note_is_on = true;
+      digitalWrite(LED, HIGH);
     }
     else if (note_is_on)
-    {
-      digitalWrite(LED, LOW);
-      sendNoteOff(pitches[0]);
+    {      
+      sendNoteOff(pitch);
       note_is_on = false;
+      digitalWrite(LED, LOW);
     }
 
-    while (sensorVal > threshold) {
-      sensorVal = sampleValues(3.0);
-      delay(1);
-    }
-    delay(1);
-  
+    delay(1);  
 }
 
 // -------------------------------------------------------------------
@@ -95,22 +109,30 @@ void sendNoteOff(int note) {
   Serial.write(0); // Velocity value of 0 (turn the note off)
 }
 
+int convertSignalToVel(double sig, const int vel_min, const int vel_max){    
+  const double sig_min = log(threshold);
+  const double sig_max = log(1.3*threshold); // Guess  
+
+  sig = log(sig);
+
+  // Normalize to the desired MIDI velocity range
+  int vel = round((((sig - sig_min) * (vel_max - vel_min)) / (sig_max-sig_min)) + vel_min);
+
+  
+
+  if (vel > 127){
+    vel = 127;
+  }
+
+  // Serial.println(vel);
+
+  return vel;
+}
+
+
 double convertToVoltage(double analogVal)
 {
   return 5.0 * (analogVal / 1023.0);
-}
-
-int convertToVel(double raw, int threshold) {
-  double outputVel;
-  double min = 60;
-  double max = 127;
-  // outputVel = floor(raw/8.0+10);
-  outputVel = floor(max * (raw - threshold) / (max - min));
-  if (outputVel >= 115) {
-    outputVel = max;
-  }
-
-  return outputVel;
 }
 
 void flashLED(int t = 8) {
