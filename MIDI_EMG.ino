@@ -55,7 +55,30 @@ int convertSignalToMIDI(double sig, const int vel_min, const int vel_max){
 }
 
 int convertSignalToPitch(double sig){
+  const int n_notes = 8;
+  int notes[n_notes] = {60, 62, 64, 65, 67, 69, 71, 72};  
+  const int note_min = 60;
+  const int note_max = 72;
+
+  const double sig_min = log(threshold);
+  const double sig_max = log(1.3*threshold); // Guess  
+
+  sig = log(sig);
+
+  // Normalize to the desired MIDI velocity range  
+  int value = round((((sig - sig_min) * (n_notes-1 - 0)) / (sig_max-sig_min)) + 0);
   
+
+  // if (value > 127){    
+  //   value = 127;
+  // }
+
+  // Serial.println(vel);
+
+  return notes[value];
+
+
+
 }
 
 // ----------------------------------------------------------------
@@ -72,11 +95,11 @@ void setup() {
 // ----------------------------------------------------------------
 void loop() {        
     sensorVal = sampleValues(3.0);    
-    double pitch = 0;
+    int pitch = 0;
 
     if (sensorVal > threshold && (millis() - t_prev_note) > t_between_notes)
     {    
-      pitch = convertSignalToMIDI(sensorVal, 60, 80);
+      pitch = convertSignalToPitch(sensorVal);
       double vel   = convertSignalToVel(sensorVal, 30, 130);
       sendNoteOn(pitch, vel);
       t_prev_note = millis();
